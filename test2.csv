@@ -1,0 +1,4 @@
+id (id),source_system_id (g_source_system_id),coa_type (g_coa_type),unique_key (g_unique_key),name (g_name),number (g_number),currency (g_currency),country (g_country),inactive (g_inactive),created_at (created_at),updated_at (updated_at),account_type (g_account_type)
+11238,9999,Project,9999-Project,DO NOT USE - Summary Value,,,,false,2026-04-21 15:06:06,2026-04-21 15:06:06,
+11244,10000,GLAccount,10000-GLAccount,Cash Accounts,,,,false,2026-04-21 15:06:06,2026-04-21 15:06:06,A
+11245,1011,Project,1011-Project,HD - SNP1 (Huntington’s Disease),,,,false,2026-04-21 15:06:06,2026-04-21 15:06:06,
