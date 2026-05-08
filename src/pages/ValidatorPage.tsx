@@ -155,9 +155,16 @@ function ResultsSummary({
   };
 
   const summaryItems = getSummary();
-  const rowErrors = new Set(errs.map((e) => e.row));
-  const failedRows = rowErrors.size;
-  const successRows = res.total - failedRows;
+  const rowErrors = new Set(
+    errs.filter((e) => typeof e.row === "number").map((e) => e.row),
+  );
+  const failedRowsCount = rowErrors.size;
+  const headerErrors = errs.filter((e) => e.row === "Header");
+  const hasHeaderError = headerErrors.length > 0;
+  const isMajorMismatch = headerErrors.some((e) =>
+    e.message.includes("MAJOR MISMATCH"),
+  );
+  const successRows = hasHeaderError ? 0 : res.total - failedRowsCount;
   const isSuccess = errs.length === 0;
 
   const getFilteredErrors = () => {
@@ -227,25 +234,57 @@ function ResultsSummary({
       <div className="flex flex-wrap gap-6 mb-4 text-sm bg-purple-50/30 p-4 rounded-lg border border-purple-100">
         <div className="flex flex-col">
           <span className="text-gray-500 font-medium text-xs uppercase tracking-wider">
-            Total Rows
+            Total Rows in File
           </span>
           <span className="text-2xl font-bold text-[#4f3b8a]">{res.total}</span>
         </div>
         <div className="flex flex-col">
           <span className="text-gray-500 font-medium text-xs uppercase tracking-wider">
-            Successful
+            {isMajorMismatch ? "Status" : "Successful"}
           </span>
-          <span className="text-2xl font-bold text-green-600">
-            {successRows}
+          <span
+            className={`text-2xl font-bold ${isMajorMismatch ? "text-red-500" : "text-green-600"}`}
+          >
+            {isMajorMismatch ? "BLOCKED" : successRows}
           </span>
         </div>
         <div className="flex flex-col">
           <span className="text-gray-500 font-medium text-xs uppercase tracking-wider">
-            Failed
+            {isMajorMismatch ? "Issue Type" : "Failed Rows"}
           </span>
-          <span className="text-2xl font-bold text-red-600">{failedRows}</span>
+          <span className="text-2xl font-bold text-red-600">
+            {isMajorMismatch ? "FORMAT" : failedRowsCount}
+          </span>
         </div>
       </div>
+
+      {hasHeaderError && (
+        <div
+          className={`mb-6 p-5 border-l-4 rounded-r-lg ${isMajorMismatch ? "bg-red-600 text-white border-red-800 animate-pulse" : "bg-red-100 border-red-500 text-red-700"}`}
+        >
+          <div className="flex items-center gap-3 font-bold mb-2">
+            <AlertCircle size={24} />
+            <span className="text-lg">
+              {isMajorMismatch
+                ? "CRITICAL: WRONG FILE TYPE DETECTED"
+                : "FILE HEADER ERROR"}
+            </span>
+          </div>
+          <p
+            className={`${isMajorMismatch ? "text-white/90" : "text-red-600"} text-sm font-medium`}
+          >
+            {isMajorMismatch
+              ? "The uploaded file structure does not look like a valid data set for this category. Row-level validation was skipped for safety."
+              : "The uploaded file is missing some required columns. Please check the summary below for details."}
+          </p>
+          {isMajorMismatch && (
+            <div className="mt-4 pt-4 border-t border-white/20 text-xs italic">
+              Expected column patterns for <strong>{title}</strong> were not
+              found.
+            </div>
+          )}
+        </div>
+      )}
 
       {summaryItems.length > 0 && (
         <div className="mb-6 space-y-2">
@@ -750,8 +789,9 @@ function FullValidationMode({ onBack }: { onBack: () => void }) {
     html += `<h2 style="color: #4f3b8a; border-bottom: 2px solid #00d1c1; padding-bottom: 8px; margin-top: 0; margin-bottom: 20px;">Gappify Integration Validation Report</h2>`;
     fileTypesList.forEach((ft) => {
       const state = states[ft.value];
-      const isSuccess = state.status === "completed" && state.results?.errors.length === 0;
-      html += `<div style="margin-bottom: 16px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; background-color: ${isSuccess ? '#f0fdf4' : state.status === 'completed' ? '#fff' : '#f8fafc'}">`;
+      const isSuccess =
+        state.status === "completed" && state.results?.errors.length === 0;
+      html += `<div style="margin-bottom: 16px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; background-color: ${isSuccess ? "#f0fdf4" : state.status === "completed" ? "#fff" : "#f8fafc"}">`;
       html += `<h3 style="margin-top: 0; margin-bottom: 12px; color: #1e293b;">${ft.label}</h3>`;
       if (state.status === "skipped") {
         html += `<p style="margin: 0; color: #64748b;">Status: <strong>Not Applicable / Skipped</strong></p>`;
@@ -761,12 +801,12 @@ function FullValidationMode({ onBack }: { onBack: () => void }) {
           (e) => e.type === "error" || !e.type,
         );
         const warns = state.results.errors.filter((e) => e.type === "warning");
-        
+
         html += `<p style="margin: 0 0 12px 0;">`;
         if (errs.length === 0 && warns.length === 0) {
-            html += `<span style="color: #16a34a; font-weight: bold;">✅ Perfect! No errors or warnings found.</span>`;
+          html += `<span style="color: #16a34a; font-weight: bold;">✅ Perfect! No errors or warnings found.</span>`;
         } else {
-            html += `<span style="color: #dc2626; font-weight: bold;">Errors: ${errs.length}</span> <span style="color: #94a3b8; margin: 0 8px;">|</span> <span style="color: #ca8a04; font-weight: bold;">Warnings: ${warns.length}</span>`;
+          html += `<span style="color: #dc2626; font-weight: bold;">Errors: ${errs.length}</span> <span style="color: #94a3b8; margin: 0 8px;">|</span> <span style="color: #ca8a04; font-weight: bold;">Warnings: ${warns.length}</span>`;
         }
         html += `</p>`;
 
@@ -779,7 +819,7 @@ function FullValidationMode({ onBack }: { onBack: () => void }) {
           const summary = Object.entries(counts)
             .sort((a, b) => b[1] - a[1])
             .slice(0, 5);
-            
+
           html += `<ul style="margin: 0; padding-left: 20px; color: #475569;">`;
           summary.forEach((s) => {
             html += `<li style="margin-bottom: 4px;"><strong>${s[0]}</strong> <span style="color: #94a3b8;">(${s[1]} occurrences)</span></li>`;
@@ -798,11 +838,11 @@ function FullValidationMode({ onBack }: { onBack: () => void }) {
   const copyToClipboard = async () => {
     const plainText = generateReport();
     const htmlContent = generateHtmlReport();
-    
+
     try {
       const clipboardItem = new ClipboardItem({
-        'text/plain': new Blob([plainText], { type: 'text/plain' }),
-        'text/html': new Blob([htmlContent], { type: 'text/html' })
+        "text/plain": new Blob([plainText], { type: "text/plain" }),
+        "text/html": new Blob([htmlContent], { type: "text/html" }),
       });
       await navigator.clipboard.write([clipboardItem]);
       alert("Report copied to clipboard with formatting!");
