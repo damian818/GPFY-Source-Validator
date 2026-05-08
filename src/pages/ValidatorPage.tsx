@@ -1,5 +1,7 @@
 import { useState, useContext, useRef } from "react";
 import Papa from "papaparse";
+import { jsPDF } from "jspdf";
+import html2canvas from "html2canvas";
 import { RulesContext, FileType } from "../rulesContext";
 import { validateData, ValidationError } from "../lib/validation";
 import { performCrossCheck, ReferenceMap } from "../lib/crossCheck";
@@ -644,6 +646,7 @@ function FullValidationMode({ onBack }: { onBack: () => void }) {
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [reportVisible, setReportVisible] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState(false);
 
   const normalizeHeader = (rawHeader: string) => {
     let lower = rawHeader.trim().toLowerCase();
@@ -727,6 +730,13 @@ function FullValidationMode({ onBack }: { onBack: () => void }) {
           },
         }));
 
+        // Block progress if major mismatch in reference data
+        const isMajorMismatch = finalErrors.some(e => e.row === "Header" && e.message.includes("MAJOR MISMATCH"));
+        if ((type === "coa" || type === "vendors") && isMajorMismatch) {
+            alert(`CRITICAL ERROR: This file does not match the expected format for ${type.toUpperCase()}. You MUST fix the headers or select the correct file to proceed as this data is used for cross-checking subsequent files.`);
+            return;
+        }
+
         if (currentStepIndex < fileTypesList.length - 1) {
           setCurrentStepIndex(currentStepIndex + 1);
         }
@@ -784,6 +794,104 @@ function FullValidationMode({ onBack }: { onBack: () => void }) {
     return lines.join("\n");
   };
 
+  const generateConsolidatedCsv = () => {
+    let allErrors: any[] = [];
+    fileTypesList.forEach((ft) => {
+      const state = states[ft.value];
+      if (state.status === "completed" && state.results) {
+        state.results.errors.forEach((e) => {
+          allErrors.push({ ...e, sourceFile: ft.label });
+        });
+      }
+    });
+
+    if (allErrors.length === 0) return alert("No errors to export.");
+
+    const csvHeader =
+      "Source File,Type,Row,Column Name,Value,Error Found,Solution Proposed\n";
+    const csvContent = allErrors
+      .map(
+        (e) =>
+          `"${e.sourceFile}","${e.type || (e.isCrossCheck ? "cross-check" : "error")}","${e.row}","${e.field}","${String(e.actualValue !== undefined ? e.actualValue : "").replace(/"/g, '""')}","${e.message.replace(/"/g, '""')}","${e.solution ? e.solution.replace(/"/g, '""') : ""}"`,
+      )
+      .join("\n");
+
+    const blob = new Blob([csvHeader + csvContent], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `consolidated_validation_errors.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportAsPdf = async () => {
+    const reportElement = document.getElementById("report-content");
+    if (!reportElement) return;
+
+    try {
+      const canvas = await html2canvas(reportElement, {
+        scale: 1.5,
+        logging: false,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        onclone: (clonedDoc) => {
+          // Remove all stylesheet content that might contain oklch
+          const styles = clonedDoc.getElementsByTagName("style");
+          for (let i = 0; i < styles.length; i++) {
+              if (styles[i].innerHTML.includes("oklch")) {
+                  styles[i].innerHTML = styles[i].innerHTML.replace(/oklch\([^)]+\)/g, "#000");
+              }
+          }
+          
+          // Fallback override style
+          const style = clonedDoc.createElement("style");
+          style.innerHTML = `
+            * {
+              color-scheme: light !important;
+            }
+            #report-content {
+              height: auto !important;
+              max-height: none !important;
+              overflow: visible !important;
+              width: 1000px !important;
+              padding: 40px !important;
+            }
+            .no-pdf {
+                display: none !important;
+            }
+          `;
+          clonedDoc.head.appendChild(style);
+
+          const clonedReport = clonedDoc.getElementById("report-content");
+          if (clonedReport) {
+            const allElements = clonedReport.getElementsByTagName("*");
+            for (let i = 0; i < allElements.length; i++) {
+              const el = allElements[i] as HTMLElement;
+              const inlineStyle = el.getAttribute("style") || "";
+              if (inlineStyle.includes("oklch")) {
+                  const sanitized = inlineStyle.replace(/oklch\([^)]+\)/g, "#000");
+                  el.setAttribute("style", sanitized);
+              }
+            }
+          }
+        },
+      });
+      const imgData = canvas.toDataURL("image/jpeg", 0.75);
+      const pdf = new jsPDF("p", "mm", "a4");
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+      pdf.addImage(imgData, "JPEG", 0, 0, pdfWidth, pdfHeight, undefined, "FAST");
+      pdf.save("Gappify_Integration_Report.pdf");
+    } catch (error) {
+      console.error("PDF generation failed:", error);
+      alert("Failed to generate PDF. Please try again.");
+    }
+  };
   const generateHtmlReport = () => {
     let html = `<div style="font-family: sans-serif; max-width: 800px; line-height: 1.5; color: #1e293b;">`;
     html += `<h2 style="color: #4f3b8a; border-bottom: 2px solid #00d1c1; padding-bottom: 8px; margin-top: 0; margin-bottom: 20px;">Gappify Integration Validation Report</h2>`;
@@ -845,11 +953,13 @@ function FullValidationMode({ onBack }: { onBack: () => void }) {
         "text/html": new Blob([htmlContent], { type: "text/html" }),
       });
       await navigator.clipboard.write([clipboardItem]);
-      alert("Report copied to clipboard with formatting!");
+      setCopyFeedback(true);
+      setTimeout(() => setCopyFeedback(false), 2000);
     } catch (err) {
       // Fallback
-      navigator.clipboard.writeText(plainText);
-      alert("Report copied to clipboard!");
+      await navigator.clipboard.writeText(plainText);
+      setCopyFeedback(true);
+      setTimeout(() => setCopyFeedback(false), 2000);
     }
   };
 
@@ -1025,17 +1135,50 @@ function FullValidationMode({ onBack }: { onBack: () => void }) {
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-6">
+            <div className="flex flex-wrap gap-3 mb-6">
+                <button
+                    onClick={exportAsPdf}
+                    className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md transition-colors"
+                >
+                    <Download size={16} /> Export as PDF
+                </button>
+                <button
+                    onClick={generateConsolidatedCsv}
+                    className="flex items-center gap-2 bg-[#4CAF50] hover:bg-[#43a047] text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md transition-colors"
+                >
+                    <FileSpreadsheet size={16} /> Export Detailed Errors (CSV)
+                </button>
+                <button
+                    onClick={copyToClipboard}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold shadow-md transition-all ${copyFeedback ? "bg-green-500 text-white" : "bg-[#00d1c1] text-[#001b44] hover:bg-[#00bdae]"}`}
+                >
+                    {copyFeedback ? (
+                        <>
+                            <CheckCircle size={16} /> Copied!
+                        </>
+                    ) : (
+                        <>
+                            <ClipboardList size={16} /> Copy to Clipboard
+                        </>
+                    )}
+                </button>
+            </div>
+
             <div className="relative">
               <div
-                className="w-full h-96 p-4 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00d1c1] focus:border-[#00d1c1] outline-none overflow-y-auto"
+                id="report-content"
+                style={{
+                    backgroundColor: "#ffffff",
+                    border: "1px solid #d1d5db",
+                    borderRadius: "8px",
+                    width: "100%",
+                    height: "24rem", // equivalent to h-96
+                    padding: "2rem", // equivalent to p-8
+                    outline: "none",
+                    overflowY: "auto"
+                }}
                 dangerouslySetInnerHTML={{ __html: generateHtmlReport() }}
               />
-              <button
-                onClick={copyToClipboard}
-                className="absolute top-4 right-6 bg-[#00d1c1] text-[#001b44] px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:bg-[#00bdae] transition-colors flex items-center gap-2"
-              >
-                <ClipboardList size={16} /> Copy to Clipboard
-              </button>
             </div>
 
             <div className="mt-6 flex justify-center">

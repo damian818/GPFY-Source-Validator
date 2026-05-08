@@ -240,9 +240,30 @@ export function validateData(
       // We'll just remove the non-readable regex check to allow smart quotes etc.
     }
 
+    // Conditional rule processing
+    const rowCoaType = rowObj[headers[headerLowercase.indexOf("g_coa_type")]]?.toString();
+
     rules.forEach((rule) => {
       const lowerRuleField = rule.field.toLowerCase();
       const originalHeaderIndex = headerLowercase.indexOf(lowerRuleField);
+      
+      // Handle conditional requirement: g_account_type is needed for GLAccount in COA
+      if (fileType === "coa" && lowerRuleField === "g_account_type" && rowCoaType === "GLAccount") {
+          const value = originalHeaderIndex !== -1 ? rowObj[headers[originalHeaderIndex]] : undefined;
+          if (value === undefined || value === null || value === "") {
+              errors.push({
+                row: rowNum,
+                column: rule.field,
+                field: rule.field,
+                message: "Required field is missing for GLAccount type",
+                solution: "For entries where 'g_coa_type' is 'GLAccount', 'g_account_type' must be provided (e.g., Asset, Liability, Expense, etc.)",
+                actualValue: value,
+                type: "error",
+              });
+              return;
+          }
+      }
+
       if (originalHeaderIndex === -1) return;
 
       const value = rowObj[headers[originalHeaderIndex]];
