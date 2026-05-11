@@ -268,22 +268,49 @@ export function validateData(
 
       const value = rowObj[headers[originalHeaderIndex]];
 
-      const isEmpty = value === undefined || value === null || value === "";
+      const isEmpty = value === undefined || value === null || String(value).trim() === "";
+
+      let isEffectivelyRequired = rule.required === "Yes";
+      let missingMessage = "Required field is missing";
+      let missingDoc = "Add a value for this field";
+      
+      if (rule.required === "Conditional" && rule.conditionalField) {
+          const depIdx = headerLowercase.indexOf(rule.conditionalField.toLowerCase());
+          if (depIdx !== -1) {
+              const depVal = rowObj[headers[depIdx]];
+              if (depVal !== undefined && depVal !== null && String(depVal).trim() !== "") {
+                  if (rule.conditionalValue && rule.conditionalValue !== "none") {
+                      if (String(depVal).trim() === rule.conditionalValue) {
+                          isEffectivelyRequired = true;
+                          missingMessage = `Required field is missing (depends on ${rule.conditionalField} = ${rule.conditionalValue})`;
+                          missingDoc = `Add a value because ${rule.conditionalField} is ${rule.conditionalValue}`;
+                      }
+                  } else {
+                      isEffectivelyRequired = true;
+                      missingMessage = `Required field is missing (depends on ${rule.conditionalField})`;
+                      missingDoc = `Add a value because ${rule.conditionalField} is present`;
+                  }
+              }
+          }
+      }
 
       if (rule.required === "No" && isEmpty) {
+        return;
+      }
+      if (rule.required === "Conditional" && !isEffectivelyRequired && isEmpty) {
         return;
       }
 
       switch (rule.dataType) {
         case "string":
           if (isEmpty) {
-            if (rule.required === "Yes") {
+            if (isEffectivelyRequired) {
               errors.push({
                 row: rowNum,
                 column: rule.field,
                 field: rule.field,
-                message: "Required field is missing",
-                solution: "Add a value for this field",
+                message: missingMessage,
+                solution: missingDoc,
                 actualValue: value,
                 type: "error",
               });
@@ -303,15 +330,15 @@ export function validateData(
               });
             }
           } else if (rule.maxLength && String(value).length > rule.maxLength) {
-            errors.push({
+            warnings.push({
               row: rowNum,
               column: rule.field,
               field: rule.field,
               message: "String exceeds maximum length of " + rule.maxLength,
               solution:
-                "Shorten the text to " + rule.maxLength + " characters or less",
+                "Text will be truncated to " + rule.maxLength + " characters",
               actualValue: value,
-              type: "error",
+              type: "warning",
             });
           }
 
@@ -321,18 +348,33 @@ export function validateData(
             value &&
             !rule.allowedValues.includes(String(value))
           ) {
-            errors.push({
-              row: rowNum,
-              column: rule.field,
-              field: rule.field,
-              message:
-                "Invalid value. Must be one of: " +
-                rule.allowedValues.join(", "),
-              solution:
-                "Use an allowed value: " + rule.allowedValues.join(", "),
-              actualValue: value,
-              type: "error",
-            });
+            if (rule.required === "No" || (rule.required === "Conditional" && !isEffectivelyRequired)) {
+              warnings.push({
+                row: rowNum,
+                column: rule.field,
+                field: rule.field,
+                message:
+                  "Value not in expected list, but field is not required. Expected: " +
+                  rule.allowedValues.join(", "),
+                solution:
+                  "Consider using an allowed value: " + rule.allowedValues.join(", "),
+                actualValue: value,
+                type: "warning",
+              });
+            } else {
+              errors.push({
+                row: rowNum,
+                column: rule.field,
+                field: rule.field,
+                message:
+                  "Invalid value. Must be one of: " +
+                  rule.allowedValues.join(", "),
+                solution:
+                  "Use an allowed value: " + rule.allowedValues.join(", "),
+                actualValue: value,
+                type: "error",
+              });
+            }
           }
 
           if (
@@ -402,13 +444,13 @@ export function validateData(
 
         case "int":
           if (isEmpty) {
-            if (rule.required === "Yes") {
+            if (isEffectivelyRequired) {
               errors.push({
                 row: rowNum,
                 column: rule.field,
                 field: rule.field,
-                message: "Required integer field is missing",
-                solution: "Add an integer value",
+                message: missingMessage.replace("Required field", "Required integer field"),
+                solution: missingDoc.replace("a value", "an integer value"),
                 actualValue: value,
                 type: "error",
               });
@@ -429,7 +471,7 @@ export function validateData(
           } else if (
             value !== undefined &&
             value !== null &&
-            value !== "" &&
+            String(value).trim() !== "" &&
             !isValidInt(value, rule.maxLength || 11)
           ) {
             errors.push({
@@ -446,13 +488,13 @@ export function validateData(
 
         case "decimal":
           if (isEmpty) {
-            if (rule.required === "Yes") {
+            if (isEffectivelyRequired) {
               errors.push({
                 row: rowNum,
                 column: rule.field,
                 field: rule.field,
-                message: "Required decimal field is missing",
-                solution: "Add a decimal value",
+                message: missingMessage.replace("Required field", "Required decimal field"),
+                solution: missingDoc.replace("a value", "a decimal value"),
                 actualValue: value,
                 type: "error",
               });
@@ -473,7 +515,7 @@ export function validateData(
           } else if (
             value !== undefined &&
             value !== null &&
-            value !== "" &&
+            String(value).trim() !== "" &&
             !isValidDecimal(value, rule.precision || 16, rule.scale || 2)
           ) {
             errors.push({
@@ -490,13 +532,13 @@ export function validateData(
 
         case "date":
           if (isEmpty) {
-            if (rule.required === "Yes") {
+            if (isEffectivelyRequired) {
               errors.push({
                 row: rowNum,
                 column: rule.field,
                 field: rule.field,
-                message: "Required date field is missing",
-                solution: "Add a date in YYYY-MM-DD format",
+                message: missingMessage.replace("Required field", "Required date field"),
+                solution: missingDoc.replace("a value", "a date in YYYY-MM-DD format"),
                 actualValue: value,
                 type: "error",
               });
@@ -517,7 +559,7 @@ export function validateData(
           } else if (
             value !== undefined &&
             value !== null &&
-            value !== "" &&
+            String(value).trim() !== "" &&
             !isValidDate(value, rule.field)
           ) {
             let helpText = "Use YYYY-MM-DD format";
@@ -545,13 +587,13 @@ export function validateData(
 
         case "boolean":
           if (isEmpty) {
-            if (rule.required === "Yes") {
+            if (isEffectivelyRequired) {
               errors.push({
                 row: rowNum,
                 column: rule.field,
                 field: rule.field,
-                message: "Required boolean field is missing",
-                solution: "Add a boolean value (0, 1, TRUE, FALSE)",
+                message: missingMessage.replace("Required field", "Required boolean field"),
+                solution: missingDoc.replace("a value", "a boolean value (0, 1, TRUE, FALSE)"),
                 actualValue: value,
                 type: "error",
               });
@@ -570,7 +612,7 @@ export function validateData(
                 type: "warning",
               });
             }
-          } else if (value !== undefined && value !== null && value !== "") {
+          } else if (value !== undefined && value !== null && String(value).trim() !== "") {
             const strVal = String(value).toLowerCase();
             if (!["0", "1", "true", "false"].includes(strVal)) {
               errors.push({

@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode, Dispatch, Se
 
 export type DataType = "string" | "int" | "decimal" | "date" | "boolean";
 
-export type RequirementLevel = "Yes" | "No" | "Insights" | "Unapproved/Late";
+export type RequirementLevel = "Yes" | "No" | "Insights" | "Unapproved/Late" | "Conditional";
 
 export interface Rule {
   field: string;
@@ -11,6 +11,8 @@ export interface Rule {
   precision?: number;
   scale?: number;
   required: RequirementLevel;
+  conditionalField?: string;
+  conditionalValue?: string;
   allowedValues?: string[];
   crossCheck?: {
     type: "coa" | "vendors";

@@ -119,7 +119,7 @@ export function AdminPage() {
         <td className="px-4 py-3">
           <Select 
             value={editForm.required} 
-            onValueChange={(val) => updateEditForm("required", val)}
+            onValueChange={(val) => updateEditForm("required", val as any)}
           >
             <SelectTrigger className="w-32 text-xs h-8">
               <SelectValue />
@@ -127,10 +127,68 @@ export function AdminPage() {
             <SelectContent>
               <SelectItem value="Yes">Yes</SelectItem>
               <SelectItem value="No">No</SelectItem>
+              <SelectItem value="Conditional">Conditional</SelectItem>
               <SelectItem value="Insights">Insights</SelectItem>
               <SelectItem value="Unapproved/Late">Unapproved/Late</SelectItem>
             </SelectContent>
           </Select>
+          {editForm.required === "Conditional" && (
+             <Select
+                value={editForm.conditionalField || "none"}
+                onValueChange={(val) => {
+                  if (val === "none") {
+                    updateEditForm("conditionalField", undefined);
+                  } else {
+                    updateEditForm("conditionalField", val);
+                  }
+                }}
+             >
+                <SelectTrigger className="w-32 text-xs h-8 mt-2">
+                  <SelectValue placeholder="Depends on..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {rules[selectedFileType]
+                    .filter((r) => r.field !== editForm.field)
+                    .map((r) => (
+                      <SelectItem key={r.field} value={r.field}>
+                        {r.field}
+                      </SelectItem>
+                  ))}
+                </SelectContent>
+             </Select>
+          )}
+          {editForm.required === "Conditional" && editForm.conditionalField === "g_coa_type" && (
+            <Select
+              value={editForm.conditionalValue || "none"}
+              onValueChange={(val) => {
+                if (val === "none") {
+                  updateEditForm("conditionalValue", undefined);
+                } else {
+                  updateEditForm("conditionalValue", val);
+                }
+              }}
+            >
+              <SelectTrigger className="w-32 text-xs h-8 mt-2">
+                <SelectValue placeholder="COA Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Any Type</SelectItem>
+                <SelectItem value="Subsidiary">Subsidiary</SelectItem>
+                <SelectItem value="Department">Department</SelectItem>
+                <SelectItem value="GLAccount">GLAccount</SelectItem>
+                <SelectItem value="Project">Project</SelectItem>
+                <SelectItem value="Product">Product</SelectItem>
+                <SelectItem value="Class">Class</SelectItem>
+                <SelectItem value="Intercompany">Intercompany</SelectItem>
+                <SelectItem value="Company">Company</SelectItem>
+                <SelectItem value="Currency">Currency</SelectItem>
+                <SelectItem value="Region">Region</SelectItem>
+                <SelectItem value="Channel">Channel</SelectItem>
+                <SelectItem value="Location">Location</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
         </td>
         <td className="px-4 py-3 space-y-2">
           {editForm.dataType === "string" || editForm.dataType === "int" ? (
@@ -347,6 +405,12 @@ export function AdminPage() {
                             )}
                             {rule.required === "No" && (
                               <Badge variant="outline" className="text-gray-500 bg-white">No</Badge>
+                            )}
+                            {rule.required === "Conditional" && (
+                              <Badge className="bg-blue-50 text-blue-700 hover:bg-blue-100 border-transparent shadow-none" title={`Depends on: ${rule.conditionalField} ${rule.conditionalValue ? `= ${rule.conditionalValue}` : ""}`}>
+                                {rule.conditionalField ? `Cond: ${rule.conditionalField}` : "Conditional"}
+                                {rule.conditionalValue ? ` (${rule.conditionalValue})` : ""}
+                              </Badge>
                             )}
                             {rule.required === "Insights" && (
                               <Badge variant="secondary" className="bg-yellow-50 text-yellow-700 hover:bg-yellow-100 border-transparent shadow-none">Insights</Badge>
