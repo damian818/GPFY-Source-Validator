@@ -296,7 +296,7 @@ export function validateData(
       const isEmpty = value === undefined || value === null || String(value).trim() === "";
 
       let isEffectivelyRequired = rule.required === "Yes";
-      let missingMessage = "Required field is missing";
+      let missingMessage = `Required field '${rule.field}' is missing`;
       let missingDoc = "Add a value for this field";
       
       if (rule.required === "Conditional" && rule.conditionalField) {
@@ -307,12 +307,12 @@ export function validateData(
                   if (rule.conditionalValue && rule.conditionalValue !== "none") {
                       if (String(depVal).trim() === rule.conditionalValue) {
                           isEffectivelyRequired = true;
-                          missingMessage = `Required field is missing (depends on ${rule.conditionalField} = ${rule.conditionalValue})`;
+                          missingMessage = `Required field '${rule.field}' is missing (depends on ${rule.conditionalField} = ${rule.conditionalValue})`;
                           missingDoc = `Add a value because ${rule.conditionalField} is ${rule.conditionalValue}`;
                       }
                   } else {
                       isEffectivelyRequired = true;
-                      missingMessage = `Required field is missing (depends on ${rule.conditionalField})`;
+                      missingMessage = `Required field '${rule.field}' is missing (depends on ${rule.conditionalField})`;
                       missingDoc = `Add a value because ${rule.conditionalField} is present`;
                   }
               }
