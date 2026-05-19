@@ -19,71 +19,96 @@ export interface ValidationResponse {
 
 function isValidDate(dateString: string, fieldName: string) {
   if (!dateString) return false;
-  let regex = /^\\d{4}-\\d{2}-\\d{2}$/;
-  if (
-    fieldName.toLowerCase() === "g_period" ||
-    fieldName.toLowerCase() === "period"
-  ) {
-    regex = /^\\d{4}-\\d{2}-01$/;
-    if (!regex.test(dateString)) return false;
-    const parts = dateString.split("-");
-    const year = parseInt(parts[0], 10);
-    const month = parseInt(parts[1], 10) - 1;
-    const date = new Date(year, month, 1);
-    return (
-      date.getFullYear() === year &&
-      date.getMonth() === month &&
-      date.getDate() === 1
-    );
-  } else if (
-    fieldName.toLowerCase() === "invoice_date_created" ||
-    fieldName.toLowerCase() === "g_invoice_date"
-  ) {
-    // Assuming invoice_date_created maps to g_invoice_date or similar if needed. It could be any.
-    regex = /^\\d{4}-\\d{2}-\\d{2}( \\d{2}:\\d{2}:\\d{2})?$/;
-    if (!regex.test(dateString)) return false;
-    const datePart = dateString.split(" ")[0];
-    const parts = datePart.split("-");
-    const year = parseInt(parts[0], 10);
-    const month = parseInt(parts[1], 10) - 1;
-    const day = parseInt(parts[2], 10);
-    const date = new Date(year, month, day);
-    return (
-      date.getFullYear() === year &&
-      date.getMonth() === month &&
-      date.getDate() === day
-    );
+
+  const str = String(dateString).trim();
+  
+  // Must contain at least two numbers separated by non-digits, or be 8 digits (YYYYMMDD), 
+  // or have a 3-letter month followed by a number
+  if (!/\d+[\D]+\d+/.test(str) && !/^\d{8}$/.test(str) && !/[a-zA-Z]{3,}\D+\d+/.test(str)) {
+    return false;
   }
 
-  if (!regex.test(dateString)) return false;
-  const parts = dateString.split("-");
-  const year = parseInt(parts[0], 10);
-  const month = parseInt(parts[1], 10) - 1;
-  const day = parseInt(parts[2], 10);
-  const date = new Date(year, month, day);
-  return (
-    date.getFullYear() === year &&
-    date.getMonth() === month &&
-    date.getDate() === day
-  );
+  // Clean string to look at the date part. Handle YYYY-MM-DD HH:MM:SS or T...Z
+  let cleanStr = str.split(" ")[0].split("T")[0];
+
+  let year: number, month: number, day: number;
+
+  if (/^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$/.test(cleanStr)) {
+    // YYYY-MM-DD, YYYY/MM/DD, or YYYY.MM.DD
+    const parts = cleanStr.split(/[-/.]/);
+    year = parseInt(parts[0], 10);
+    month = parseInt(parts[1], 10) - 1;
+    day = parseInt(parts[2], 10);
+  } else if (/^\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}$/.test(cleanStr)) {
+    // MM/DD/YYYY, DD/MM/YYYY
+    const parts = cleanStr.split(/[-/.]/);
+    let p0 = parseInt(parts[0], 10);
+    let p1 = parseInt(parts[1], 10);
+    if (p0 > 12 && p1 <= 12) {
+      // Very likely DD/MM/YYYY
+      month = p1 - 1;
+      day = p0;
+    } else {
+      // Default to MM/DD/YYYY
+      month = p0 - 1;
+      day = p1;
+    }
+    
+    year = parseInt(parts[2], 10);
+    if (year < 100) {
+      year += year < 50 ? 2000 : 1900;
+    }
+  } else if (/^\d{8}$/.test(cleanStr)) {
+    // YYYYMMDD
+    year = parseInt(cleanStr.substring(0, 4), 10);
+    month = parseInt(cleanStr.substring(4, 6), 10) - 1;
+    day = parseInt(cleanStr.substring(6, 8), 10);
+  } else {
+    // Fallback: Use standard JS date parser
+    const ts = Date.parse(str);
+    if (isNaN(ts)) return false;
+    const d = new Date(ts);
+    year = d.getFullYear();
+    month = d.getMonth();
+    day = d.getDate();
+  }
+
+  const dateObj = new Date(year, month, day);
+  const isValid = dateObj.getFullYear() === year &&
+                  dateObj.getMonth() === month &&
+                  dateObj.getDate() === day;
+
+  if (!isValid) return false;
+
+  // Specific rule checks based on field name
+  const lowerName = fieldName.toLowerCase();
+  if (lowerName === "g_period" || lowerName === "period") {
+    // Periods must correspond to the first of the month
+    if (day !== 1) return false;
+  }
+
+  return true;
 }
 
 function isValidDecimal(value: any, precision: number, scale: number) {
   if (value === undefined || value === null || value === "") return false;
-  const strValue = String(value).replace(/,/g, "");
-  if (!/^-?\\d*(\\.\\d*)?$/.test(strValue)) return false;
+  const strValue = String(value).replace(/,/g, "").replace(/^\$/, "").trim();
+  if (!/^-?\d*(\.\d*)?$/.test(strValue) || strValue === "" || strValue === "-" || strValue === ".") return false;
   const parts = strValue.split(".");
   const integerPart = parts[0].replace(/^-/, "");
   const decimalPart = parts.length > 1 ? parts[1] : "";
-  return integerPart.length <= precision - scale && decimalPart.length <= scale;
+  const p = Number(precision) || 16;
+  const s = scale !== undefined && scale !== null ? Number(scale) : 2;
+  return integerPart.length <= p - s && decimalPart.length <= s;
 }
 
 function isValidInt(value: any, maxLength: number) {
   if (value === undefined || value === null || value === "") return false;
-  const strValue = String(value).replace(/,/g, "");
-  if (!/^-?\\d+$/.test(strValue)) return false;
+  const strValue = String(value).replace(/,/g, "").replace(/^\$/, "").trim();
+  if (!/^-?\d+$/.test(strValue)) return false;
   const digits = strValue.replace(/^-/, "");
-  return digits.length <= maxLength;
+  const maxL = Number(maxLength) || 11;
+  return digits.length <= maxL;
 }
 
 function isValidEmail(email: any) {
@@ -538,7 +563,7 @@ export function validateData(
                 column: rule.field,
                 field: rule.field,
                 message: missingMessage.replace("Required field", "Required date field"),
-                solution: missingDoc.replace("a value", "a date in YYYY-MM-DD format"),
+                solution: missingDoc.replace("a value", "a valid date (e.g. YYYY-MM-DD)"),
                 actualValue: value,
                 type: "error",
               });
@@ -551,7 +576,7 @@ export function validateData(
                 column: rule.field,
                 field: rule.field,
                 message: `Date field ${rule.field} is missing (${rule.required})`,
-                solution: "Adding a date in YYYY-MM-DD format is recommended",
+                solution: "Adding a valid date (e.g. YYYY-MM-DD) is recommended",
                 actualValue: value,
                 type: "warning",
               });
@@ -562,17 +587,13 @@ export function validateData(
             String(value).trim() !== "" &&
             !isValidDate(value, rule.field)
           ) {
-            let helpText = "Use YYYY-MM-DD format";
+            let helpText = "Use a valid date (e.g. YYYY-MM-DD or MM/DD/YYYY)";
             if (
               rule.field.toLowerCase() === "g_period" ||
               rule.field.toLowerCase() === "period"
             )
-              helpText = "Use YYYY-MM-01 format";
-            if (
-              rule.field.toLowerCase() === "invoice_date_created" ||
-              rule.field.toLowerCase() === "g_invoice_date"
-            )
-              helpText = "Use YYYY-MM-DD or YYYY-MM-DD hh:mm:ss format";
+              helpText = "Ensure date is the 1st of the month (e.g. YYYY-MM-01)";
+            
             errors.push({
               row: rowNum,
               column: rule.field,
