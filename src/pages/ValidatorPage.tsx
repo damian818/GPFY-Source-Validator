@@ -374,84 +374,91 @@ function ResultsSummary({
             )}
           </div>
 
-          <div className="max-h-80 overflow-y-auto pr-2 space-y-3">
-            {(() => {
-              const filtered = getFilteredErrors();
-              const byRow: Record<string, ValidationError[]> = {};
-              filtered.forEach((e) => {
-                const key = String(e.row);
-                if (!byRow[key]) byRow[key] = [];
-                byRow[key].push(e);
-              });
+          <div className="border border-purple-100 rounded-lg shadow-sm overflow-hidden bg-white">
+            <div className="max-h-[500px] overflow-y-auto relative">
+              {(() => {
+                const filtered = getFilteredErrors();
 
-              if (filtered.length === 0)
+                if (filtered.length === 0)
+                  return (
+                    <div className="text-gray-500 italic p-6 text-center bg-gray-50">
+                      No issues for this filter.
+                    </div>
+                  );
+
                 return (
-                  <div className="text-gray-500 italic p-4 text-center border rounded-lg bg-gray-50">
-                    No issues for this filter.
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead className="sticky top-0 bg-purple-50 text-[#4f3b8a] font-semibold uppercase tracking-wider z-10 border-b border-purple-200 shadow-xs">
+                        <tr>
+                          <th className="px-4 py-3 bg-purple-50 text-[#4f3b8a] font-semibold uppercase tracking-wider whitespace-nowrap">Row</th>
+                          <th className="px-4 py-3 bg-purple-50 text-[#4f3b8a] font-semibold uppercase tracking-wider whitespace-nowrap">Column / Field</th>
+                          <th className="px-4 py-3 bg-purple-50 text-[#4f3b8a] font-semibold uppercase tracking-wider whitespace-nowrap">Severity</th>
+                          <th className="px-4 py-3 bg-purple-50 text-[#4f3b8a] font-semibold uppercase tracking-wider">Issue Found</th>
+                          <th className="px-4 py-3 bg-purple-50 text-[#4f3b8a] font-semibold uppercase tracking-wider">Actual Value</th>
+                          <th className="px-4 py-3 bg-purple-50 text-[#4f3b8a] font-semibold uppercase tracking-wider">Recommended Action / Solution</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-purple-100">
+                        {filtered.slice(0, 150).map((e, idx) => (
+                          <tr
+                            key={idx}
+                            className="odd:bg-white even:bg-slate-50/50 hover:bg-purple-50/25 transition-colors animate-in fade-in duration-200"
+                          >
+                            <td className="px-4 py-3 font-semibold text-[#4f3b8a] whitespace-nowrap">
+                              Row {e.row}
+                            </td>
+                            <td className="px-4 py-3 font-semibold text-gray-800 whitespace-nowrap font-mono text-[11px]">
+                              {e.field}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              {e.type === "warning" ? (
+                                <Badge className="bg-yellow-105 text-yellow-800 shadow-none border-transparent text-[10px] uppercase">
+                                  Warning
+                                </Badge>
+                              ) : e.isCrossCheck ? (
+                                <Badge className="bg-[#00d1c1] text-white shadow-none border-transparent text-[10px] uppercase tracking-wider">
+                                  Cross-Check
+                                </Badge>
+                              ) : (
+                                <Badge className="bg-red-105 text-red-800 shadow-none border-transparent text-[10px] uppercase tracking-wider">
+                                  Error
+                                </Badge>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-gray-700 min-w-[200px] leading-relaxed">
+                              {e.message}
+                            </td>
+                            <td className="px-4 py-3 min-w-[120px]">
+                              {e.actualValue !== undefined ? (
+                                <span className="inline-block text-[11px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono border border-slate-200 truncate max-w-[200px]" title={String(e.actualValue)}>
+                                  "{String(e.actualValue)}"
+                                </span>
+                              ) : (
+                                <span className="text-gray-400 italic text-[11px]">-</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 min-w-[240px] leading-relaxed">
+                              {e.solution ? (
+                                <div className="text-green-700 text-xs bg-green-50 p-2 rounded border border-green-100 inline-flex items-start gap-1 shadow-2xs">
+                                  <span className="shrink-0">💡</span>
+                                  <span>{e.solution}</span>
+                                </div>
+                              ) : (
+                                <span className="text-gray-400 italic text-[11px]">-</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 );
-
-              return Object.entries(byRow)
-                .slice(0, 50)
-                .map(([r, errGrp]) => (
-                  <div
-                    key={r}
-                    className="bg-white border border-purple-100 rounded-lg p-3 shadow-sm"
-                  >
-                    <div className="font-bold text-[#4f3b8a] border-b border-purple-50 pb-2 mb-2 flex items-center justify-between text-sm">
-                      <span>Row {r}</span>
-                      <span className="text-xs font-normal text-gray-400">
-                        {errGrp.length} issue(s)
-                      </span>
-                    </div>
-                    <ul className="space-y-2">
-                      {errGrp.map((e, idx) => (
-                        <li
-                          key={idx}
-                          className="flex gap-2 text-sm items-start"
-                        >
-                          <div className="mt-0.5">
-                            {e.type === "warning" ? (
-                              <Badge className="bg-yellow-100 text-yellow-800 shadow-none border-transparent text-[10px] uppercase">
-                                Warning
-                              </Badge>
-                            ) : e.isCrossCheck ? (
-                              <Badge className="bg-[#00d1c1] text-white shadow-none border-transparent text-[10px] uppercase tracking-wider">
-                                Cross-Check
-                              </Badge>
-                            ) : (
-                              <Badge className="bg-red-100 text-red-800 shadow-none border-transparent text-[10px] uppercase tracking-wider">
-                                Error
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="flex-1 leading-tight">
-                            <div className="flex items-baseline gap-1.5 flex-wrap">
-                              <span className="font-semibold text-gray-700">
-                                '{e.field}':
-                              </span>
-                              <span className="text-gray-600">{e.message}</span>
-                              {e.actualValue !== undefined && (
-                                <span className="text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono border border-slate-200">
-                                  Value: "{String(e.actualValue)}"
-                                </span>
-                              )}
-                            </div>
-                            {e.solution && (
-                              <div className="text-green-700 mt-1 text-xs bg-green-50 p-1.5 rounded inline-block w-full border border-green-100 break-words">
-                                💡 {e.solution}
-                              </div>
-                            )}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ));
-            })()}
-            {getFilteredErrors().length > 50 && (
-              <div className="text-center text-xs text-gray-500 p-2 bg-gray-50 rounded-lg border border-gray-100">
-                Showing first 50 rows. Export to see all issues.
+              })()}
+            </div>
+            {getFilteredErrors().length > 150 && (
+              <div className="text-center text-xs text-gray-500 p-3 bg-gray-50 rounded-b-lg border-t border-purple-50">
+                Showing first 150 validation issues. Please export the CSV to see all errors.
               </div>
             )}
           </div>
